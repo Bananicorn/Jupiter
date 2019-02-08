@@ -3,8 +3,8 @@ local jupiter = {saveDir = "save"}
 
 jupiter.save = function(data)
 	assert(type(data) == "table", "Tables must be provided to saveFile!")
-	if not love.filesystem.isDirectory(jupiter.saveDir) then assert(love.filesystem.createDirectory(jupiter.saveDir), "Unable to create save directory in " .. love.filesystem.getSaveDirectory() .. "!") end --make the save folder if required
-	file = love.filesystem.newFile(data._fileName)
+	if not love.filesystem.getInfo(jupiter.saveDir) == "directory" then assert(love.filesystem.createDirectory(jupiter.saveDir), "Unable to create save directory in " .. love.filesystem.getSaveDirectory() .. "!") end --make the save folder if required
+	local file = love.filesystem.newFile(jupiter.saveDir .. "/" .. data._fileName)
 	file:open("w")
 
 	local function serial(table, scope)
@@ -14,7 +14,7 @@ jupiter.save = function(data)
 				if type(v) == "table" then
 					serial(v, scope .. tostring(k) .. ".")
 				else
-					x = file:write(scope .. k .. "=" .. tostring(v) .. "\n") --write value
+					local x = file:write(scope .. k .. "=" .. tostring(v) .. "\n") --write value
 					if not x then return nil end
 				end
 			end
@@ -28,7 +28,8 @@ end
 
 --load a file. If no specific file is given it returns the latest save file
 jupiter.load = function(name)
-	if not love.filesystem.isDirectory(jupiter.saveDir) then assert(love.filesystem.createDirectory(jupiter.saveDir), "Unable to create save directory in " .. love.filesystem.getSaveDirectory() .. "!") end
+
+	if not love.filesystem.getInfo(jupiter.saveDir) == "directory" then assert(love.filesystem.createDirectory(jupiter.saveDir), "Unable to create save directory in " .. love.filesystem.getSaveDirectory() .. "!") end
 	--load the latest save file if no file is given (useful for 'continue' option)
 	if not name then
 		local saveFiles = love.filesystem.getDirectoryItems(jupiter.saveDir)
@@ -36,18 +37,18 @@ jupiter.load = function(name)
 		for k, file in ipairs(saveFiles) do
 			--ignore files such as .DS_Store
 			if not (file:sub(1, 1) == ".") and file:match("%.save$") then
-				table.insert(orderedFiles, {f = file, t = love.filesystem.getLastModified(jupiter.saveDir .. "/" .. file) or 0})
+				table.insert(orderedFiles, {f = file, t = love.filesystem.getInfo(jupiter.saveDir .. "/" .. file).modtime or 0})
 			end
 		end
 		if # orderedFiles ~= 0 then
 			--sort the files in modified order
 			table.sort(orderedFiles, function(a, b) return a.t > b.t end)
-			name = orderedFiles[1]
+			name = orderedFiles[1].f
 		end
 	end
 	--don't do anything if there are no saves
 	if name then
-		if love.filesystem.isFile(name) then
+		if love.filesystem.getInfo(jupiter.saveDir .. "/" .. name) and love.filesystem.getInfo(jupiter.saveDir .. "/" .. name).type == "file" then
 			local saveFile = {} --data from the file
 			local pointer
 			--find tables
@@ -65,7 +66,7 @@ jupiter.load = function(name)
 			end
 
 			--load the data
-			for l in love.filesystem.lines(name) do
+			for l in love.filesystem.lines(jupiter.saveDir .. "/" .. name) do
 				local k, v = l:match("^(..-)=(.+)$")
 				if k and v then
 					local index = deserial(k)
